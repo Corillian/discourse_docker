@@ -22,7 +22,7 @@ docker_rec_version='1.6.0'
 config_file=containers/"$config".yml
 cidbootstrap=cids/"$config"_bootstrap.cid
 local_discourse=local_discourse
-image=discourse/discourse:1.0.16
+image=discourse/discourse:1.0.17
 docker_path=`which docker.io || which docker`
 
 
@@ -197,6 +197,18 @@ check_resources() {
   if [ -t 0 ] && [ "$resources" != "ok" ]; then
     echo
     read -p "Press ENTER to continue, or Ctrl-C to exit and give your system more resources"
+  fi
+}
+
+check_ports() {
+  local valid=$(netstat -tln | awk '{print $4}' | grep ":${1}\$")
+
+  if [ -n "$valid" ]; then
+    echo "Launcher has detected that port ${1} is in use."
+    echo ""
+    echo "If you are trying to run Discourse simultaneously with another web server like Apache or nginx, you will need to bind to a different port."
+    echo "See https://meta.discourse.org/t/17247 for help."
+    exit 1
   fi
 }
 
@@ -468,7 +480,18 @@ run_start(){
 
    host_run
    ports=`cat $config_file | $docker_path run $user_args --rm -i -a stdout -a stdin $image ruby -e \
-          "require 'yaml'; puts YAML.load(STDIN.readlines.join)['expose'].map{|p| '-p ' << p.to_s << ' '}.join"`
+          "require 'yaml'; puts YAML.load(STDIN.readlines.join)['expose'].map{|p| \"-p #{p}\"}.join(' ')"`
+
+   IFS='-p ' read -a array <<< "$ports"
+   for element in "${array[@]}"
+   do
+     IFS=':' read -a args <<< "$element"
+     if [ "${#args[@]}" == "2" ]; then
+       check_ports "${args[0]}"
+     elif [ "${#args[@]}" == "3" ]; then
+       check_ports "${args[1]}"
+     fi
+   done
 
    docker_args=`cat $config_file | $docker_path run $user_args --rm -i -a stdout -a stdin $image ruby -e \
           "require 'yaml'; puts YAML.load(STDIN.readlines.join)['docker_args']"`
