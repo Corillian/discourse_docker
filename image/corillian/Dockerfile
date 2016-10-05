@@ -1,5 +1,5 @@
-# Current version 1.3.5
-FROM discourse/base:1.3.5
+# Current version 1.3.6
+FROM discourse/base:1.3.6
 
 MAINTAINER Keith Newton "https://twitter.com/inovae_keith"
 
