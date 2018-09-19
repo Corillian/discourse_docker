@@ -38,7 +38,7 @@ Placeholder spot for shared volumes with various Discourse containers. You may e
 
 Dockerfiles for Discourse; see [the README](image/README.md) for further details.
 
-The Docker repository will always contain the latest built version at: https://hub.docker.com/r/discourse/discourse/, you should not need to build the base image.
+The Docker repository will always contain the latest built version at: https://hub.docker.com/r/discourse/base/, you should not need to build the base image.
 
 ### Launcher
 
@@ -107,6 +107,18 @@ links:
 
 Links another container to the current container. This will add `--link postgres:postgres`
 to the options when running the container.
+
+#### labels:
+```
+# app.yml
+
+labels:
+  monitor: 'true'
+  app_name: {{config}}_discourse
+```
+
+Add labels to the current container. The above will add `--l monitor=true -l app_name=dev_discourse` to the options
+when running the container
 
 ### Upgrading Discourse
 
@@ -184,7 +196,7 @@ then run:
 This will spawn a new Ubuntu VM, install Docker, and then await your
 instructions.  You can then SSH into the VM with `vagrant ssh`, become
 `root` with `sudo -i`, and then you're right to go.  Your live git repo is
-already available at `/var/discourse`, so you can just `cd /var/discourse`
+already available at `/vagrant`, so you can just `cd /vagrant`
 and then start running `launcher`.
 
 

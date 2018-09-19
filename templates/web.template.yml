@@ -24,22 +24,7 @@ params:
   upload_size: 10m
 
 run:
-  # see: https://www.imagemagick.org/discourse-server/viewtopic.php?f=4&t=29588
-  - replace:
-      filename: /usr/local/etc/ImageMagick-6/policy.xml
-      from: "<policymap>"
-      to: |
-        <policymap>
-          <policy domain="coder" rights="none" pattern="EPHEMERAL" />
-          <policy domain="coder" rights="none" pattern="URL" />
-          <policy domain="coder" rights="none" pattern="HTTPS" />
-          <policy domain="coder" rights="none" pattern="MVG" />
-          <policy domain="coder" rights="none" pattern="MSL" />
-          <policy domain="coder" rights="none" pattern="TEXT" />
-          <policy domain="coder" rights="none" pattern="SHOW" />
-          <policy domain="coder" rights="none" pattern="WIN" />
-          <policy domain="coder" rights="none" pattern="PLT" />
-
+  - exec: thpoff echo "thpoff is installed!"
   - exec: /usr/local/bin/ruby -e 'if ENV["DISCOURSE_SMTP_ADDRESS"] == "smtp.example.com"; puts "Aborting! Mail is not configured!"; exit 1; end'
   - exec: /usr/local/bin/ruby -e 'if ENV["DISCOURSE_HOSTNAME"] == "discourse.example.com"; puts "Aborting! Domain is not configured!"; exit 1; end'
   - exec: chown -R discourse /home/discourse
@@ -61,8 +46,8 @@ run:
         conf=/var/www/discourse/config/discourse.conf
 
         # find DISCOURSE_ env vars, strip the leader, lowercase the key
-        /usr/local/bin/ruby -e 'ENV.each{|k,v| puts "#{$1.downcase} = #{v}" if k =~ /^DISCOURSE_(.*)/}' > $conf
-        
+        /usr/local/bin/ruby -e 'ENV.each{|k,v| puts "#{$1.downcase} = '\''#{v}'\''" if k =~ /^DISCOURSE_(.*)/}' > $conf
+
   - file:
      path: /etc/runit/1.d/enable-brotli
      chmod: "+x"
@@ -80,7 +65,7 @@ run:
         # postgres
         cd $home
         chown -R discourse:www-data /shared/log/rails
-        LD_PRELOAD=$RUBY_ALLOCATOR HOME=/home/discourse USER=discourse exec chpst -u discourse:www-data -U discourse:www-data bundle exec config/unicorn_launcher -E production -c config/unicorn.conf.rb
+        LD_PRELOAD=$RUBY_ALLOCATOR HOME=/home/discourse USER=discourse exec thpoff chpst -u discourse:www-data -U discourse:www-data bundle exec config/unicorn_launcher -E production -c config/unicorn.conf.rb
 
   - file:
      path: /etc/service/nginx/run
@@ -162,13 +147,13 @@ run:
       cmd:
         # ensure we are on latest bundler
         - gem update bundler
-        - chown -R discourse $home
+        - find $home ! -user discourse -exec chown discourse {} \+
 
   - exec:
       cd: $home
       hook: bundle_exec
       cmd:
-        - su discourse -c 'bundle install --deployment --verbose --without test --without development'
+        - su discourse -c 'bundle install --deployment --verbose --without test --without development --retry 3 --jobs 4'
         - su discourse -c 'bundle exec rake db:migrate'
         - su discourse -c 'bundle exec rake assets:precompile'
 
@@ -200,6 +185,20 @@ run:
        (cd /var/www/discourse && RAILS_ENV=production sudo -H -E -u discourse bundle exec bin/rake "$@")
 
   - file:
+     path: /usr/local/bin/rbtrace
+     chmod: +x
+     contents: |
+       #!/bin/bash
+       (cd /var/www/discourse && RAILS_ENV=production sudo -H -E -u discourse bundle exec rbtrace "$@")
+
+  - file:
+     path: /usr/local/bin/stackprof
+     chmod: +x
+     contents: |
+       #!/bin/bash
+       (cd /var/www/discourse && RAILS_ENV=production sudo -H -E -u discourse bundle exec stackprof "$@")
+
+  - file:
      path: /etc/update-motd.d/10-web
      chmod: +x
      contents: |
@@ -213,11 +212,10 @@ run:
      contents: |
         /shared/log/rails/*.log
         {
-                rotate 14
+                rotate 7
                 dateext
                 daily
                 missingok
-                notifempty
                 delaycompress
                 compress
                 postrotate
@@ -231,11 +229,10 @@ run:
         /var/log/nginx/*.log {
           daily
           missingok
-          rotate 14
+          rotate 7
           compress
           delaycompress
-          notifempty
-          create 0640 www-data www-data
+          create 0644 www-data www-data
           sharedscripts
           postrotate
             sv 1 nginx

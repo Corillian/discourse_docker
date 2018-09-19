@@ -2,11 +2,11 @@
 # VERSION:  release
 FROM ubuntu:16.04
 
-ENV PG_MAJOR 9.5
+ENV PG_MAJOR 10
 ENV RUBY_ALLOCATOR /usr/lib/libjemalloc.so.1
 ENV COMPRESS_BROTLI 1
 
-MAINTAINER Sam Saffron "https://twitter.com/samsaffron"
+#LABEL maintainer="Sam Saffron \"https://twitter.com/samsaffron\""
 
 RUN echo 2.0.`date +%Y%m%d` > /VERSION
 
@@ -32,7 +32,8 @@ RUN apt-get -y install build-essential git wget \
                        postgresql-${PG_MAJOR} postgresql-client-${PG_MAJOR} \
                        postgresql-contrib-${PG_MAJOR} libpq-dev libreadline-dev \
                        language-pack-en cron anacron \
-                       psmisc rsyslog vim whois brotli libunwind-dev
+                       psmisc rsyslog vim whois brotli libunwind-dev \
+                       libtcmalloc-minimal4
 RUN sed -i -e 's/start -q anacron/anacron -s/' /etc/cron.d/anacron
 RUN sed -i.bak 's/$ModLoad imklog/#$ModLoad imklog/' /etc/rsyslog.conf
 RUN dpkg-divert --local --rename --add /sbin/initctl
@@ -46,13 +47,12 @@ RUN cd / &&\
     locale-gen en_US &&\
     apt-get install -y nodejs &&\
     npm install -g uglify-js@"<3" &&\
-    npm install svgo -g
+    npm install -g svgo
 
 ADD install-nginx /tmp/install-nginx
 RUN /tmp/install-nginx
 
 RUN apt-get -y install advancecomp jhead jpegoptim libjpeg-turbo-progs optipng
-
 
 RUN mkdir /jemalloc-stable && cd /jemalloc-stable &&\
       wget https://github.com/jemalloc/jemalloc/releases/download/3.6.0/jemalloc-3.6.0.tar.bz2 &&\
@@ -60,29 +60,20 @@ RUN mkdir /jemalloc-stable && cd /jemalloc-stable &&\
       cd / && rm -rf /jemalloc-stable
 
 RUN mkdir /jemalloc-new && cd /jemalloc-new &&\
-      wget https://github.com/jemalloc/jemalloc/releases/download/5.0.1/jemalloc-5.0.1.tar.bz2 &&\
-      tar -xjf jemalloc-5.0.1.tar.bz2 && cd jemalloc-5.0.1 && ./configure --prefix=/usr --with-install-suffix=5.0.1 && make build_lib && make install_lib &&\
+      wget https://github.com/jemalloc/jemalloc/releases/download/5.1.0/jemalloc-5.1.0.tar.bz2 &&\
+      tar -xjf jemalloc-5.1.0.tar.bz2 && cd jemalloc-5.1.0 && ./configure --prefix=/usr --with-install-suffix=5.1.0 && make build_lib && make install_lib &&\
       cd / && rm -rf /jemalloc-new
 
-RUN mkdir /gperftools && git clone https://github.com/gperftools/gperftools.git /gperftools &&\
-      cd /gperftools && git checkout gperftools-2.5 && ./autogen.sh && ./configure --prefix=$PWD/lib &&\
-      make install && mv lib/lib/libtcmalloc_minimal.so.4.3.0 /usr/lib && cd / && rm -rf /gperftools
-
-RUN mkdir /lockless && cd /lockless && curl -O https://locklessinc.com/downloads/lockless_allocator_linux.tgz &&\
-      tar zxf lockless_allocator_linux.tgz && mv lockless_allocator_linux/64bit/libllalloc.so.1.4 /usr/lib &&\
-      cd / && rm -rf /lockless
-
-ADD rb_thread_fd_close.patch /tmp/rb_thread_fd_close.patch
 RUN echo 'gem: --no-document' >> /usr/local/etc/gemrc &&\
     mkdir /src && cd /src && git clone https://github.com/sstephenson/ruby-build.git &&\
     cd /src/ruby-build && ./install.sh &&\
-    cd / && rm -rf /src/ruby-build && (ruby-build 2.4.2 /usr/local --patch << /tmp/rb_thread_fd_close.patch)
+    cd / && rm -rf /src/ruby-build && (ruby-build 2.5.1 /usr/local)
 
 RUN gem update --system
 
-RUN gem install bundler &&\
-    rm -rf /usr/local/share/ri/2.4.2/system &&\
-    cd / && git clone https://github.com/SamSaffron/pups.git
+RUN gem install bundler --force &&\
+    rm -rf /usr/local/share/ri/2.5.1/system &&\
+    cd / && git clone https://github.com/discourse/pups.git
 
 ADD install-imagemagick /tmp/install-imagemagick
 RUN /tmp/install-imagemagick
@@ -99,11 +90,11 @@ RUN /tmp/install-gifsicle
 ADD install-pngquant /tmp/install-pngquant
 RUN /tmp/install-pngquant
 
-ADD phantomjs /usr/local/bin/phantomjs
-
-# Not using the official repo until they compile against a recent openssl
-# RUN cd tmp && wget https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-linux-x86_64.tar.bz2
-# RUN cd tmp && tar jxf phantomjs-2.1.1-linux-x86_64.tar.bz2 && mv /tmp/phantomjs-2.1.1-linux-x86_64/bin/phantomjs /usr/local/bin
+# This tool allows us to disable huge page support for our current process
+# since the flag is preserved through forks and execs it can be used on any
+# process
+ADD thpoff.c /src/thpoff.c
+RUN gcc -o /usr/local/sbin/thpoff /src/thpoff.c && rm /src/thpoff.c
 
 # clean up for docker squash
 RUN   rm -fr /usr/share/man &&\
