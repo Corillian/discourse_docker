@@ -8,7 +8,6 @@ RUN useradd discourse -s /bin/bash -m -U &&\
     cd /var/www &&\
     git clone https://github.com/corillian/discourse.git &&\
     cd discourse &&\
-    git remote set-branches --add origin tests-passed &&\
     chown -R discourse:discourse /var/www/discourse &&\
     cd /var/www/discourse &&\
     sudo -u discourse bundle install --deployment \
