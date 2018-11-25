@@ -1,17 +1,19 @@
-# Current version 1.0.16
-FROM discourse/base:1.0.16
+FROM discourse/base:2.0.20180608
 
 MAINTAINER Keith Newton "https://twitter.com/inovae_keith"
 
 # Discourse specific bits
 RUN useradd discourse -s /bin/bash -m -U &&\
-    mkdir -p /var/www && cd /var/www &&\
-     git clone https://github.com/corillian/discourse.git &&\
-     cd discourse &&\
+    mkdir -p /var/www &&\
+    cd /var/www &&\
+    git clone https://github.com/corillian/discourse.git &&\
+    cd discourse &&\
+    git remote set-branches --add origin tests-passed &&\
     chown -R discourse:discourse /var/www/discourse &&\
     cd /var/www/discourse &&\
-     sudo -u discourse bundle install --deployment \
+    sudo -u discourse bundle install --deployment \
          --without test --without development &&\
+    bundle exec rake maxminddb:get &&\
     find /var/www/discourse/vendor/bundle -name tmp -type d -exec rm -rf {} +
 
 
