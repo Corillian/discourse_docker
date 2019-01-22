@@ -55,6 +55,11 @@ while [ ${#} -gt 0 ]; do
   shift 1
 done
 
+if [ -z "$command" -o -z "$config" -a "$command" != "cleanup" ]; then
+  usage
+  exit 1
+fi
+
 # Docker doesn't like uppercase characters, spaces or special characters, catch it now before we build everything out and then find out
 re='[[:upper:]/ !@#$%^&*()+~`=]'
 if [[ $config =~ $re ]];
@@ -446,10 +451,6 @@ fi
   exit 0
 }
 
-if [ -z "$command" -a -z "$config" ]; then
-  usage
-fi
-
 if [ ! "$command" == "setup" ]; then
   if [[ ! -e $config_file ]]; then
     echo "Config file was not found, ensure $config_file exists"
@@ -668,8 +669,6 @@ run_bootstrap() {
   $docker_path commit `cat $cidbootstrap` $local_discourse/$config || echo 'FAILED TO COMMIT'
   $docker_path rm `cat $cidbootstrap` && rm $cidbootstrap
 }
-
-
 
 case "$command" in
   bootstrap)
