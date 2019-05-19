@@ -4,7 +4,7 @@ FROM ubuntu:16.04
 
 ENV PG_MAJOR 10
 ENV RUBY_ALLOCATOR /usr/lib/libjemalloc.so.1
-ENV COMPRESS_BROTLI 1
+ENV RAILS_ENV production
 
 #LABEL maintainer="Sam Saffron \"https://twitter.com/samsaffron\""
 
@@ -23,7 +23,7 @@ RUN apt-get -y upgrade
 RUN curl http://apt.postgresql.org/pub/repos/apt/ACCC4CF8.asc | apt-key add -
 RUN echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -sc)-pgdg main" | \
         tee /etc/apt/sources.list.d/postgres.list
-RUN curl --silent --location https://deb.nodesource.com/setup_8.x | sudo bash -
+RUN curl --silent --location https://deb.nodesource.com/setup_10.x | sudo bash -
 RUN apt-get -y update
 RUN apt-get -y install build-essential git wget \
                        libxslt-dev libcurl4-openssl-dev \
@@ -38,7 +38,7 @@ RUN sed -i -e 's/start -q anacron/anacron -s/' /etc/cron.d/anacron
 RUN sed -i.bak 's/$ModLoad imklog/#$ModLoad imklog/' /etc/rsyslog.conf
 RUN dpkg-divert --local --rename --add /sbin/initctl
 RUN sh -c "test -f /sbin/initctl || ln -s /bin/true /sbin/initctl"
-RUN apt-get -y install redis-server haproxy openssh-server
+RUN apt-get -y install haproxy openssh-server
 RUN cd / &&\
     apt-get -y install runit monit socat &&\
     mkdir -p /etc/runit/1.d &&\
@@ -64,18 +64,19 @@ RUN mkdir /jemalloc-new && cd /jemalloc-new &&\
       tar -xjf jemalloc-5.1.0.tar.bz2 && cd jemalloc-5.1.0 && ./configure --prefix=/usr --with-install-suffix=5.1.0 && make build_lib && make install_lib &&\
       cd / && rm -rf /jemalloc-new
 
-RUN apt-get -y install ruby &&\
-    echo 'gem: --no-document' >> /usr/local/etc/gemrc &&\
+RUN echo 'gem: --no-document' >> /usr/local/etc/gemrc &&\
     mkdir /src && cd /src && git clone https://github.com/sstephenson/ruby-build.git &&\
     cd /src/ruby-build && ./install.sh &&\
-    cd / && rm -rf /src/ruby-build && (ruby-build 2.5.2 /usr/local) &&\
-    apt-get -y remove ruby
+    cd / && rm -rf /src/ruby-build && (ruby-build 2.6.3 /usr/local)
 
 RUN gem update --system
 
 RUN gem install bundler --force &&\
-    rm -rf /usr/local/share/ri/2.5.2/system &&\
+    rm -rf /usr/local/share/ri/2.6.3/system &&\
     cd / && git clone https://github.com/discourse/pups.git
+
+ADD install-redis /tmp/install-redis
+RUN /tmp/install-redis
 
 ADD install-imagemagick /tmp/install-imagemagick
 RUN /tmp/install-imagemagick
@@ -129,7 +130,6 @@ ADD cron /etc/service/cron/run
 ADD rsyslog /etc/service/rsyslog/run
 ADD cron.d_anacron /etc/cron.d/anacron
 
-
 # Discourse specific bits
 RUN useradd discourse -s /bin/bash -m -U &&\
     mkdir -p /var/www &&\
@@ -138,7 +138,6 @@ RUN useradd discourse -s /bin/bash -m -U &&\
     cd discourse &&\
     chown -R discourse:discourse /var/www/discourse &&\
     cd /var/www/discourse &&\
-    sudo -u discourse bundle install --deployment \
-         --without test --without development &&\
+    sudo -u discourse bundle install --deployment --jobs 4 --without test development &&\
     bundle exec rake maxminddb:get &&\
     find /var/www/discourse/vendor/bundle -name tmp -type d -exec rm -rf {} +
